@@ -1,0 +1,13 @@
+{
+  "name": "concert-review-platform",
+  "version": "1.0.0",
+  "description": "全栈演唱会现场评价分享平台",
+  "private": true,
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "seed": "cd backend && npm run seed"
+  }
+}
