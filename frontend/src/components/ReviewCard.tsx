@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ReviewWithDetails } from '../types';
-import { reviewAPI } from '../api';
+import { reviewAPI, uploadAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 interface ReviewCardProps {
@@ -14,6 +14,39 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
   const navigate = useNavigate();
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const [editSoundScore, setEditSoundScore] = useState(review.sound_score);
+  const [editStageScore, setEditStageScore] = useState(review.stage_score);
+  const [editAtmosphereScore, setEditAtmosphereScore] = useState(review.atmosphere_score);
+  const [editValueScore, setEditValueScore] = useState(review.value_score);
+  const [editContent, setEditContent] = useState(review.content);
+  const [editImages, setEditImages] = useState<string[]>([]);
+  const [editVideos, setEditVideos] = useState<string[]>([]);
+  const [editUploading, setEditUploading] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState(false);
+
+  useEffect(() => {
+    if (showEditModal) {
+      setEditSoundScore(review.sound_score);
+      setEditStageScore(review.stage_score);
+      setEditAtmosphereScore(review.atmosphere_score);
+      setEditValueScore(review.value_score);
+      setEditContent(review.content);
+      setEditImages(JSON.parse(review.images || '[]'));
+      setEditVideos(JSON.parse(review.videos || '[]'));
+      setEditError('');
+      setEditSuccess(false);
+    }
+  }, [showEditModal, review]);
+
+  const editOverallScore = ((editSoundScore + editStageScore + editAtmosphereScore + editValueScore) / 4).toFixed(1);
+
+  const isOwner = user && user.id === review.user_id;
 
   const handleLike = async () => {
     if (!user) {
@@ -53,6 +86,91 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
       setReportReason('');
     } catch (err: any) {
       alert(err.response?.data?.error || '举报失败');
+    }
+  };
+
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setEditUploading(true);
+    setEditError('');
+
+    try {
+      const res = await uploadAPI.uploadImage(Array.from(files));
+      const imageUrls = res.data.files.map(f => f.url);
+      setEditImages(prev => [...prev, ...imageUrls]);
+    } catch (err: any) {
+      setEditError(err.response?.data?.error || '图片上传失败');
+    } finally {
+      setEditUploading(false);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleEditVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setEditUploading(true);
+    setEditError('');
+
+    try {
+      const res = await uploadAPI.uploadVideo(Array.from(files));
+      const videoUrls = res.data.files.map(f => f.url);
+      setEditVideos(prev => [...prev, ...videoUrls]);
+    } catch (err: any) {
+      setEditError(err.response?.data?.error || '视频上传失败');
+    } finally {
+      setEditUploading(false);
+      if (videoInputRef.current) {
+        videoInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeEditImage = (index: number) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeEditVideo = (index: number) => {
+    setEditVideos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditError('');
+    setEditSuccess(false);
+
+    if (!editContent.trim()) {
+      setEditError('请填写评价内容');
+      return;
+    }
+
+    setEditSubmitting(true);
+
+    try {
+      await reviewAPI.update(review.id, {
+        sound_score: editSoundScore,
+        stage_score: editStageScore,
+        atmosphere_score: editAtmosphereScore,
+        value_score: editValueScore,
+        content: editContent.trim(),
+        images: editImages,
+        videos: editVideos
+      });
+
+      setEditSuccess(true);
+      setTimeout(() => {
+        setShowEditModal(false);
+        onUpdate?.();
+      }, 2000);
+    } catch (err: any) {
+      setEditError(err.response?.data?.error || '提交失败');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -125,18 +243,23 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
       )}
 
       <div className="review-actions">
-        <button 
+        <button
           className={`action-btn ${review.is_liked ? 'active' : ''}`}
           onClick={handleLike}
         >
           ❤️ {review.likes_count}
         </button>
-        <button 
+        <button
           className={`action-btn ${review.is_favorited ? 'active favorited' : ''}`}
           onClick={handleFavorite}
         >
           ⭐ {review.favorites_count}
         </button>
+        {isOwner && (
+          <button className="action-btn" onClick={() => setShowEditModal(true)}>
+            ✏️ 编辑
+          </button>
+        )}
         <button className="action-btn" onClick={() => setShowReportModal(true)}>
           🚩 举报
         </button>
@@ -148,7 +271,7 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
             <h3 className="modal-title">举报评价</h3>
             <div className="form-group">
               <label>举报原因</label>
-              <textarea 
+              <textarea
                 value={reportReason}
                 onChange={e => setReportReason(e.target.value)}
                 rows={4}
@@ -159,6 +282,209 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
               <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>取消</button>
               <button className="btn btn-danger" onClick={handleReport}>提交举报</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => !editSubmitting && setShowEditModal(false)}>
+          <div className="modal-content edit-modal" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">✏️ 编辑评价</h3>
+
+            <div className="edit-concert-info">
+              <span style={{ fontSize: '14px', color: '#666' }}>演唱会：</span>
+              <span style={{ fontWeight: '600' }}>{review.artist} - {review.venue}</span>
+            </div>
+
+            {editError && <div className="alert alert-error">{editError}</div>}
+            {editSuccess && (
+              <div className="alert alert-success">
+                评价修改成功！已重新进入审核流程，审核通过后将更新展示。
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="form-group">
+                <label>综合评分: <span style={{ color: '#667eea', fontSize: '24px', fontWeight: '700' }}>{editOverallScore}</span></label>
+              </div>
+
+              <div className="form-group">
+                <label>音响效果: {editSoundScore}分</label>
+                <div className="score-slider">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={editSoundScore}
+                    onChange={e => setEditSoundScore(Number(e.target.value))}
+                  />
+                  <span className="score-value">{editSoundScore}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>舞台设计: {editStageScore}分</label>
+                <div className="score-slider">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={editStageScore}
+                    onChange={e => setEditStageScore(Number(e.target.value))}
+                  />
+                  <span className="score-value">{editStageScore}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>现场气氛: {editAtmosphereScore}分</label>
+                <div className="score-slider">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={editAtmosphereScore}
+                    onChange={e => setEditAtmosphereScore(Number(e.target.value))}
+                  />
+                  <span className="score-value">{editAtmosphereScore}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>票价值不值: {editValueScore}分</label>
+                <div className="score-slider">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={editValueScore}
+                    onChange={e => setEditValueScore(Number(e.target.value))}
+                  />
+                  <span className="score-value">{editValueScore}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>评价内容 *</label>
+                <textarea
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  rows={6}
+                  placeholder="分享你的演唱会体验，描述现场的感受、精彩瞬间、印象深刻的表演等..."
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>上传照片 (最多9张)</label>
+                <div
+                  className="upload-area"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  {editUploading ? '上传中...' : '📷 点击上传现场照片'}
+                </div>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={handleEditImageUpload}
+                />
+                {editImages.length > 0 && (
+                  <div className="upload-preview">
+                    {editImages.map((img, i) => (
+                      <div key={i} style={{ position: 'relative' }}>
+                        <img src={img} alt="" />
+                        <button
+                          type="button"
+                          onClick={() => removeEditImage(i)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.7)',
+                            color: '#fff',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>上传视频 (最多3个)</label>
+                <div
+                  className="upload-area"
+                  onClick={() => videoInputRef.current?.click()}
+                >
+                  {editUploading ? '上传中...' : '🎬 点击上传现场视频'}
+                </div>
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={handleEditVideoUpload}
+                />
+                {editVideos.length > 0 && (
+                  <div className="upload-preview">
+                    {editVideos.map((video, i) => (
+                      <div key={i} style={{ position: 'relative' }}>
+                        <video src={video} />
+                        <button
+                          type="button"
+                          onClick={() => removeEditVideo(i)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.7)',
+                            color: '#fff',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '24px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={editSubmitting}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={editSubmitting || editUploading}
+                >
+                  {editSubmitting ? '提交中...' : '保存修改'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

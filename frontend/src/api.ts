@@ -59,6 +59,15 @@ export const reviewAPI = {
     images?: string[];
     videos?: string[];
   }) => api.post<{ id: number; overall_score: number }>('/reviews', data),
+  update: (id: number, data: {
+    sound_score: number;
+    stage_score: number;
+    atmosphere_score: number;
+    value_score: number;
+    content: string;
+    images?: string[];
+    videos?: string[];
+  }) => api.put<{ id: number; overall_score: number }>(`/reviews/${id}`, data),
   like: (id: number) => api.post<{ liked: boolean }>(`/reviews/${id}/like`),
   favorite: (id: number) => api.post<{ favorited: boolean }>(`/reviews/${id}/favorite`),
   report: (id: number, reason: string) => api.post<{ success: boolean }>(`/reviews/${id}/report`, { reason })

@@ -308,4 +308,66 @@ router.post('/:id/report', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const reviewId = req.params.id;
+    const {
+      sound_score,
+      stage_score,
+      atmosphere_score,
+      value_score,
+      content,
+      images,
+      videos
+    } = req.body;
+
+    const existing = await getQuery<Review>(
+      'SELECT * FROM reviews WHERE id = ?',
+      [reviewId]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: '评价不存在' });
+    }
+
+    if (existing.user_id !== userId) {
+      return res.status(403).json({ error: '无权编辑此评价' });
+    }
+
+    if (!sound_score || !stage_score || !atmosphere_score || !value_score || !content) {
+      return res.status(400).json({ error: '请填写完整信息' });
+    }
+
+    const scores = [sound_score, stage_score, atmosphere_score, value_score];
+    if (scores.some(s => s < 1 || s > 10)) {
+      return res.status(400).json({ error: '评分必须在1-10之间' });
+    }
+
+    const overall_score = scores.reduce((a, b) => a + b, 0) / 4;
+
+    await runQuery(
+      `UPDATE reviews 
+       SET sound_score = ?, stage_score = ?, atmosphere_score = ?, value_score = ?, 
+           overall_score = ?, content = ?, images = ?, videos = ?, status = 'pending'
+       WHERE id = ?`,
+      [
+        sound_score,
+        stage_score,
+        atmosphere_score,
+        value_score,
+        overall_score,
+        content,
+        JSON.stringify(images || []),
+        JSON.stringify(videos || []),
+        reviewId
+      ]
+    );
+
+    res.json({ id: reviewId, overall_score });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
