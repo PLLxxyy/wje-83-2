@@ -40,6 +40,7 @@ export interface Review {
   images: string;
   videos: string;
   status: 'pending' | 'approved' | 'rejected';
+  parent_id?: number;
   created_at: string;
 }
 

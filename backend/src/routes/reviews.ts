@@ -308,6 +308,35 @@ router.post('/:id/report', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+router.get('/:id/edit-pending', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const reviewId = req.params.id;
+
+    const existing = await getQuery<Review>(
+      'SELECT id, user_id FROM reviews WHERE id = ?',
+      [reviewId]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: '评价不存在' });
+    }
+
+    if (existing.user_id !== userId) {
+      return res.status(403).json({ error: '无权查看此评价' });
+    }
+
+    const pending = await getQuery<Review>(
+      'SELECT * FROM reviews WHERE parent_id = ? AND status = ?',
+      [reviewId, 'pending']
+    );
+
+    res.json({ pending_edit: pending || null });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
@@ -347,11 +376,16 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
     const overall_score = scores.reduce((a, b) => a + b, 0) / 4;
 
     await runQuery(
-      `UPDATE reviews 
-       SET sound_score = ?, stage_score = ?, atmosphere_score = ?, value_score = ?, 
-           overall_score = ?, content = ?, images = ?, videos = ?, status = 'pending'
-       WHERE id = ?`,
+      "DELETE FROM reviews WHERE parent_id = ? AND status = 'pending'",
+      [reviewId]
+    );
+
+    const result = await runQuery(
+      `INSERT INTO reviews (user_id, concert_id, sound_score, stage_score, atmosphere_score, value_score, overall_score, content, images, videos, parent_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
+        userId,
+        existing.concert_id,
         sound_score,
         stage_score,
         atmosphere_score,
@@ -364,7 +398,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
       ]
     );
 
-    res.json({ id: reviewId, overall_score });
+    res.json({ id: result.lastID, overall_score, parent_id: reviewId });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

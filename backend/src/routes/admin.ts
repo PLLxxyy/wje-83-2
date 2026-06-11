@@ -14,10 +14,13 @@ router.get('/reviews/pending', async (req, res) => {
     const sql = `
       SELECT r.*,
         u.username,
-        c.artist, c.venue
+        c.artist, c.venue,
+        pr.content as original_content,
+        pr.overall_score as original_overall_score
       FROM reviews r
       JOIN users u ON r.user_id = u.id
       JOIN concerts c ON r.concert_id = c.id
+      LEFT JOIN reviews pr ON r.parent_id = pr.id
       WHERE r.status = 'pending'
       ORDER BY r.created_at DESC
       LIMIT ? OFFSET ?
@@ -43,7 +46,38 @@ router.get('/reviews/pending', async (req, res) => {
 router.post('/reviews/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
-    await runQuery('UPDATE reviews SET status = ? WHERE id = ?', ['approved', id]);
+    const review = await getQuery<any>(
+      'SELECT * FROM reviews WHERE id = ?',
+      [id]
+    );
+
+    if (!review) {
+      return res.status(404).json({ error: '评价不存在' });
+    }
+
+    if (review.parent_id) {
+      await runQuery(
+        `UPDATE reviews 
+         SET sound_score = ?, stage_score = ?, atmosphere_score = ?, value_score = ?, 
+             overall_score = ?, content = ?, images = ?, videos = ?, status = 'approved'
+         WHERE id = ?`,
+        [
+          review.sound_score,
+          review.stage_score,
+          review.atmosphere_score,
+          review.value_score,
+          review.overall_score,
+          review.content,
+          review.images,
+          review.videos,
+          review.parent_id
+        ]
+      );
+      await runQuery('DELETE FROM reviews WHERE id = ?', [id]);
+    } else {
+      await runQuery('UPDATE reviews SET status = ? WHERE id = ?', ['approved', id]);
+    }
+
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -53,7 +87,21 @@ router.post('/reviews/:id/approve', async (req, res) => {
 router.post('/reviews/:id/reject', async (req, res) => {
   try {
     const { id } = req.params;
-    await runQuery('UPDATE reviews SET status = ? WHERE id = ?', ['rejected', id]);
+    const review = await getQuery<any>(
+      'SELECT parent_id FROM reviews WHERE id = ?',
+      [id]
+    );
+
+    if (!review) {
+      return res.status(404).json({ error: '评价不存在' });
+    }
+
+    if (review.parent_id) {
+      await runQuery('DELETE FROM reviews WHERE id = ?', [id]);
+    } else {
+      await runQuery('UPDATE reviews SET status = ? WHERE id = ?', ['rejected', id]);
+    }
+
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

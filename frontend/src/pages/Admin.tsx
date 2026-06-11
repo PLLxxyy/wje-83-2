@@ -245,7 +245,9 @@ function AdminReviews() {
     }
   };
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: number, isEdit: boolean) => {
+    const confirmMsg = isEdit ? '审核通过将用该编辑版本替换原评价，确认通过？' : '确定要通过这条评价吗？';
+    if (!confirm(confirmMsg)) return;
     try {
       await adminAPI.approveReview(id);
       loadReviews();
@@ -254,8 +256,11 @@ function AdminReviews() {
     }
   };
 
-  const handleReject = async (id: number) => {
-    if (!confirm('确定要拒绝这条评价吗？')) return;
+  const handleReject = async (id: number, isEdit: boolean) => {
+    const confirmMsg = isEdit
+      ? '拒绝编辑版本，原评价将保持不变，确认拒绝？'
+      : '确定要拒绝这条评价吗？';
+    if (!confirm(confirmMsg)) return;
     try {
       await adminAPI.rejectReview(id);
       loadReviews();
@@ -285,6 +290,7 @@ function AdminReviews() {
           <table className="table">
             <thead>
               <tr>
+                <th>类型</th>
                 <th>用户</th>
                 <th>演唱会</th>
                 <th>评分</th>
@@ -294,34 +300,72 @@ function AdminReviews() {
               </tr>
             </thead>
             <tbody>
-              {reviews.map(review => (
-                <tr key={review.id}>
-                  <td>{review.username}</td>
-                  <td>
-                    <div><strong>{(review as any).artist}</strong></div>
-                    <div style={{ fontSize: '12px', color: '#86868b' }}>{(review as any).venue}</div>
-                  </td>
-                  <td style={{ color: '#667eea', fontWeight: '700' }}>{review.overall_score.toFixed(1)}</td>
-                  <td style={{ maxWidth: '300px' }}>{review.content}</td>
-                  <td>{new Date(review.created_at).toLocaleString('zh-CN')}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button 
-                        className="btn btn-success btn-sm"
-                        onClick={() => handleApprove(review.id)}
-                      >
-                        通过
-                      </button>
-                      <button 
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleReject(review.id)}
-                      >
-                        拒绝
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {reviews.map(review => {
+                const isEdit = !!(review as any).parent_id;
+                const originalContent = (review as any).original_content;
+                const originalScore = (review as any).original_overall_score;
+                return (
+                  <tr key={review.id}>
+                    <td>
+                      {isEdit ? (
+                        <span className="status-badge" style={{ background: '#fff4e5', color: '#ad6800', border: '1px solid #ffd591' }}>
+                          ✏️ 编辑版本
+                        </span>
+                      ) : (
+                        <span className="status-badge" style={{ background: '#e6f7ff', color: '#0050b3', border: '1px solid #91d5ff' }}>
+                          🆕 新评价
+                        </span>
+                      )}
+                    </td>
+                    <td>{review.username}</td>
+                    <td>
+                      <div><strong>{(review as any).artist}</strong></div>
+                      <div style={{ fontSize: '12px', color: '#86868b' }}>{(review as any).venue}</div>
+                    </td>
+                    <td>
+                      <div style={{ color: '#667eea', fontWeight: '700' }}>{review.overall_score.toFixed(1)}</div>
+                      {isEdit && originalScore !== undefined && (
+                        <div style={{ fontSize: '12px', color: '#86868b', textDecoration: 'line-through' }}>
+                          原: {Number(originalScore).toFixed(1)}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ maxWidth: '350px' }}>
+                      <div style={{ marginBottom: isEdit ? '8px' : 0 }}>{review.content}</div>
+                      {isEdit && originalContent && (
+                        <div style={{
+                          background: '#f5f5f7',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#86868b',
+                          borderLeft: '3px solid #d2d2d7'
+                        }}>
+                          <div style={{ fontWeight: '600', marginBottom: '4px' }}>原文：</div>
+                          {originalContent}
+                        </div>
+                      )}
+                    </td>
+                    <td>{new Date(review.created_at).toLocaleString('zh-CN')}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => handleApprove(review.id, isEdit)}
+                        >
+                          通过
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleReject(review.id, isEdit)}
+                        >
+                          拒绝
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 

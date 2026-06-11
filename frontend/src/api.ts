@@ -67,7 +67,9 @@ export const reviewAPI = {
     content: string;
     images?: string[];
     videos?: string[];
-  }) => api.put<{ id: number; overall_score: number }>(`/reviews/${id}`, data),
+  }) => api.put<{ id: number; overall_score: number; parent_id: number }>(`/reviews/${id}`, data),
+  getPendingEdit: (id: number) =>
+    api.get<{ pending_edit: ReviewWithDetails | null }>(`/reviews/${id}/edit-pending`),
   like: (id: number) => api.post<{ liked: boolean }>(`/reviews/${id}/like`),
   favorite: (id: number) => api.post<{ favorited: boolean }>(`/reviews/${id}/favorite`),
   report: (id: number, reason: string) => api.post<{ success: boolean }>(`/reviews/${id}/report`, { reason })

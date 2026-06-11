@@ -47,10 +47,18 @@ function initDatabase() {
       images TEXT DEFAULT '[]',
       videos TEXT DEFAULT '[]',
       status TEXT DEFAULT 'pending',
+      parent_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id),
-      FOREIGN KEY (concert_id) REFERENCES concerts (id)
+      FOREIGN KEY (concert_id) REFERENCES concerts (id),
+      FOREIGN KEY (parent_id) REFERENCES reviews (id)
     )`);
+
+    db.run(`ALTER TABLE reviews ADD COLUMN parent_id INTEGER`, (err: any) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('添加parent_id列失败:', err.message);
+      }
+    });
 
     db.run(`CREATE TABLE IF NOT EXISTS likes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

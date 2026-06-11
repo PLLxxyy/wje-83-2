@@ -17,6 +17,7 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
   const [showEditModal, setShowEditModal] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const [hasPendingEdit, setHasPendingEdit] = useState(false);
 
   const [editSoundScore, setEditSoundScore] = useState(review.sound_score);
   const [editStageScore, setEditStageScore] = useState(review.stage_score);
@@ -29,6 +30,16 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState(false);
+
+  const isOwner = user && user.id === review.user_id;
+
+  useEffect(() => {
+    if (isOwner) {
+      reviewAPI.getPendingEdit(review.id).then(res => {
+        setHasPendingEdit(!!res.data.pending_edit);
+      }).catch(() => {});
+    }
+  }, [isOwner, review.id]);
 
   useEffect(() => {
     if (showEditModal) {
@@ -45,8 +56,6 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
   }, [showEditModal, review]);
 
   const editOverallScore = ((editSoundScore + editStageScore + editAtmosphereScore + editValueScore) / 4).toFixed(1);
-
-  const isOwner = user && user.id === review.user_id;
 
   const handleLike = async () => {
     if (!user) {
@@ -163,10 +172,11 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
       });
 
       setEditSuccess(true);
+      setHasPendingEdit(true);
       setTimeout(() => {
         setShowEditModal(false);
         onUpdate?.();
-      }, 2000);
+      }, 2500);
     } catch (err: any) {
       setEditError(err.response?.data?.error || '提交失败');
     } finally {
@@ -242,6 +252,12 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
         </div>
       )}
 
+      {isOwner && hasPendingEdit && (
+        <div className="alert" style={{ background: '#fff8e6', color: '#9a6700', border: '1px solid #ffe58f', margin: '12px 0', fontSize: '13px' }}>
+          ⏳ 你提交的编辑版本正在审核中，审核通过后将更新展示。
+        </div>
+      )}
+
       <div className="review-actions">
         <button
           className={`action-btn ${review.is_liked ? 'active' : ''}`}
@@ -256,8 +272,13 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
           ⭐ {review.favorites_count}
         </button>
         {isOwner && (
-          <button className="action-btn" onClick={() => setShowEditModal(true)}>
-            ✏️ 编辑
+          <button
+            className={`action-btn ${hasPendingEdit ? 'disabled' : ''}`}
+            onClick={() => !hasPendingEdit && setShowEditModal(true)}
+            disabled={hasPendingEdit}
+            title={hasPendingEdit ? '已有编辑版本正在审核中' : '编辑评价'}
+          >
+            ✏️ {hasPendingEdit ? '审核中' : '编辑'}
           </button>
         )}
         <button className="action-btn" onClick={() => setShowReportModal(true)}>
@@ -296,10 +317,14 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
               <span style={{ fontWeight: '600' }}>{review.artist} - {review.venue}</span>
             </div>
 
+            <div className="alert" style={{ background: '#e6f7ff', color: '#0050b3', border: '1px solid #91d5ff', fontSize: '13px' }}>
+              💡 编辑后将生成新的审核版本，审核通过前原评价保持不变。
+            </div>
+
             {editError && <div className="alert alert-error">{editError}</div>}
             {editSuccess && (
               <div className="alert alert-success">
-                评价修改成功！已重新进入审核流程，审核通过后将更新展示。
+                编辑版本已提交，正在等待审核！审核通过后将更新展示。
               </div>
             )}
 
@@ -481,7 +506,7 @@ export default function ReviewCard({ review, onUpdate }: ReviewCardProps) {
                   className="btn btn-primary"
                   disabled={editSubmitting || editUploading}
                 >
-                  {editSubmitting ? '提交中...' : '保存修改'}
+                  {editSubmitting ? '提交中...' : '提交审核'}
                 </button>
               </div>
             </form>
